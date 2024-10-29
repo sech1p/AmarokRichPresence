@@ -24,6 +24,12 @@ However, it turned out that it doesn't have Discord integration, and there's als
 
 ## 💾 Installing
 
+### Binary
+
+Open [releases](https://github.com/sech1p/AmarokRichPresence/releases) page, select `AmarokRichPresence-linux-x64`, download and execute it.
+
+### From source
+
 Open your Terminal and type the commands below:
 
 ```sh
