@@ -30,7 +30,7 @@ Open your Terminal and type the commands below:
 $ git clone https://github.com/sech1p/AmarokRichPresence.git
 $ cd AmarokRichPresence
 $ pip install -r requirements.txt
-$ python AmarokRichPresence.py
+$ ./AmarokRichPresence
 ```
 
 🌸 Now you should see Amarok status in your Discord game status, now just turn on some song and enjoy AmarokRichPresence~
