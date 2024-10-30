@@ -5,6 +5,7 @@ from PIL import Image, ImageTk
 import pystray
 from pydbus import SessionBus
 import time
+from threading import Thread
 from discordrp import Presence
 
 amarok_logo = Image.open("amarok.png")
@@ -48,8 +49,11 @@ class AmarokRichPresenceSettings():
 class AmarokRichPresence():
     def __init__(self):
         super().__init__()
+        Thread(target=self.runSettings).start()
+        Thread(target=self.displayTrack).start()
+
+    def runSettings(self):
         AmarokRichPresenceSettings()
-        self.displayTrack()
 
     def displayTrack(self):
         with Presence(client_id) as presence:
