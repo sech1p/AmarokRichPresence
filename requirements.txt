@@ -4,3 +4,4 @@ platformdirs==4.3.6
 pydbus==0.6.0
 PyGObject==3.50.0
 pystray==0.19.5
+PyUpload==0.1.4
