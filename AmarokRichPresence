@@ -1,8 +1,13 @@
 #!/usr/bin/env python
 
+import tkinter as tk
+from PIL import Image, ImageTk
+import pystray
 from pydbus import SessionBus
 import time
 from discordrp import Presence
+
+amarok_logo = Image.open("amarok.png")
 
 session_bus = SessionBus()
 
@@ -11,9 +16,39 @@ amarok_version = amarok_mpris.GetAll("")["applicationVersion"]
 
 client_id = "1300779919214776340"
 
+class AmarokRichPresenceSettings():
+    def __init__(self):
+        super().__init__()
+        self.root = self.createTkRoot()
+        self.displayInTray()
+
+    def createTkRoot(self):
+        root = tk.Tk()
+
+        root.title("AmarokRichPresence")
+        root.iconphoto(True, ImageTk.PhotoImage(amarok_logo))
+        root.resizable(0, 0)
+        root.geometry("250x550")
+
+        return root
+
+    def traySettings(self):
+        self.root.mainloop()
+
+    def trayExit(self):
+        exit(0)
+    
+    def displayInTray(self):
+        tray = pystray.Icon("AmarokRichPresence", amarok_logo, "AmarokRichPresence", menu=pystray.Menu(
+            pystray.MenuItem("Settings", self.traySettings),
+            pystray.MenuItem("Exit", self.trayExit)
+        ))
+        tray.run()
+
 class AmarokRichPresence():
     def __init__(self):
         super().__init__()
+        AmarokRichPresenceSettings()
         self.displayTrack()
 
     def displayTrack(self):
