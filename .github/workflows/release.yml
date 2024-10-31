@@ -23,6 +23,8 @@ jobs:
         run: sudo apt install python3-tk
       - name: 💾 Install Pillow
         run: sudo apt install python3-pil python3-pil.imagetk
+      - name: 💾 Install LibGTK
+        run: sudo apt install libgtk-3-0
       - name: 💾 Install dependencies
         run: python -m pip install -r requirements.txt
       - name: 💾 Install pyinstaller
