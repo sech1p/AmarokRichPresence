@@ -1,6 +1,6 @@
 # 🗒️ TODO
 
-- [ ] Possibility to choose between Amarok logo and album/song cover
+- [X] Possibility to choose between Amarok logo and album/song cover
 - [ ] Change the displayed song information
 - [ ] Display the song number
 - [ ] Links to the song and album on Discogs and Last.fm

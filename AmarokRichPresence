@@ -1,14 +1,23 @@
 #!/usr/bin/env python
 
 import tkinter as tk
+import configparser
+import os
+from platformdirs import user_config_dir
+from notifypy import Notify
 from PIL import Image, ImageTk
 import pystray
 from pydbus import SessionBus
 import time
 from threading import Thread
+from pyupload.uploader import *
 from discordrp import Presence
+from urllib.parse import urlparse, unquote
+import musicbrainzngs as mbz
 
 amarok_logo = Image.open("amarok.png")
+
+config = configparser.ConfigParser()
 
 session_bus = SessionBus()
 
@@ -20,16 +29,87 @@ client_id = "1300779919214776340"
 class AmarokRichPresenceSettings():
     def __init__(self):
         super().__init__()
+        global config
+
+        self.config_directory = user_config_dir("AmarokRichPresence")
+        self.config_location = os.path.join(self.config_directory, "amarokrp.config")
+        config = self.createConfig()
         self.root = self.createTkRoot()
         self.displayInTray()
 
+    def createConfig(self):
+        self.config = configparser.ConfigParser()
+
+        if not os.path.exists(self.config_directory):
+            os.mkdir(self.config_directory)
+        
+        self.config.read(self.config_location)
+        if config.sections() == []:
+            config["options"] = { "PresenceImage": "amarok" }
+
+        return self.config
+
+    def saveChanges(self, data):        
+        if data["PresenceImage"] == "Amarok Logo":
+            presence_image = "amarok"
+        elif data["PresenceImage"] == "Album cover art":
+            presence_image = "album"
+        
+        cfg = config
+        options = cfg["options"]
+
+        options["PresenceImage"] = presence_image
+        
+        cfg["options"] = options
+
+        with open(self.config_location, "w") as config_file:
+            cfg.write(config_file)
+
+            notification = Notify()
+            notification.application_name = "AmarokRichPresence"
+            notification.title = "AmarokRichPresence"
+            notification.message = "Settings saved successfully"
+            notification.icon = "amarok.png"
+
+            notification.send()
+        
+        self.root.destroy()
+
     def createTkRoot(self):
+        cfg = config
+        options = cfg["options"]
+        presence_image = options["PresenceImage"]
+
+        if presence_image == "amarok":
+            presence_image = "Amarok Logo"
+        elif presence_image == "album":
+            presence_image = "Album cover art"
+
         root = tk.Tk()
 
         root.title("AmarokRichPresence")
         root.iconphoto(True, ImageTk.PhotoImage(amarok_logo))
         root.resizable(0, 0)
-        root.geometry("250x550")
+        root.geometry("250x250")
+
+        presence_image_variable = tk.StringVar(root, name="presence_image")
+        presence_image_variable.set(presence_image)
+
+        presence_image_label = tk.Label(root, text="Presence displayed image:", relief=tk.RAISED)
+        presence_image_label.pack()
+
+        presence_image_menu = tk.OptionMenu(root, presence_image_variable, "Amarok Logo", "Album cover art")
+        presence_image_menu.pack()
+
+        # Dumb way because object is not stored in variable, but this variable wasn't update itself
+        save_button = tk.Button(
+            root, text="Save Changes", command=lambda: self.saveChanges(
+                {
+                    "PresenceImage": presence_image_variable.get()
+                }
+            )
+        )
+        save_button.pack(side=tk.BOTTOM)
 
         return root
 
@@ -49,15 +129,51 @@ class AmarokRichPresenceSettings():
 class AmarokRichPresence():
     def __init__(self):
         super().__init__()
+        global config
+        self.previous_cover = ""
         Thread(target=self.runSettings).start()
         Thread(target=self.displayTrack).start()
 
     def runSettings(self):
-        AmarokRichPresenceSettings()
+        return AmarokRichPresenceSettings()
+
+    def waitForConfig(self):
+        try:
+            options = config["options"]
+            
+            return options
+        except:
+            self.waitForConfig()
+
+    def updateCover(self, cover_image):
+        parsed = urlparse(cover_image)
+        path_to_cover = unquote(parsed.path)
+
+        uploader = CatboxUploader(path_to_cover)
+        result = uploader.execute()
+            
+        return result
 
     def displayTrack(self):
+        print("Initializing a config, this may take a while...")
+
+        options = self.waitForConfig()
+        if not options:
+            options = self.waitForConfig()
+
+        print("Config initialized")
+
+        presence_image = options["PresenceImage"]
+        image = None
+
         with Presence(client_id) as presence:
             print("Connected to Discord")
+
+            track_info = self.getCurrentTrackInfo()
+            if track_info:
+                cover = track_info["cover"]
+                if cover != "" and not "https://coverartarchive.org/release/" in cover:
+                    image = self.updateCover(cover)
 
             while True:
                 current_track_info = self.getCurrentTrackInfo()
@@ -76,7 +192,20 @@ class AmarokRichPresence():
                     artist = current_track_info["artist"]
                     title = current_track_info["title"]
                     album = current_track_info["album"]
+                    cover = current_track_info["cover"]
 
+                    if presence_image == "amarok":
+                        image = "amarok"
+                    elif presence_image == "album":
+                        if cover == "":
+                            image = "album"
+                        
+                        if "https://coverartarchive.org/release/" in cover:
+                            image = cover
+                        else:
+                            if cover != self.previous_cover:
+                                image = self.updateCover(cover)
+                    
                     time_start = int(time.time() - position)
                     time_end = int(time.time() + duration - position)
 
@@ -94,7 +223,7 @@ class AmarokRichPresence():
                             "details": f"{artist} - {title}",
                             "timestamps": timestamps,
                             "assets": {
-                                "large_image": "amarok",
+                                "large_image": image,
                                 "large_text": f"Amarok {amarok_version} (https://github.com/sech1p/AmarokRichPresence)",
                                 "small_image": status_image,
                                 "small_text": status
@@ -114,20 +243,53 @@ class AmarokRichPresence():
                         }
                     )
 
+                self.previous_cover = cover
+
                 time.sleep(5)
     
     def getCurrentTrackInfo(self):
         amarok_player_mpris = session_bus.get("org.kde.amarok", "/org/mpris/MediaPlayer2")
-        amarok_objects = amarok_player_mpris.GetAll("")
 
-        status = amarok_objects["PlaybackStatus"]
+        amarok_player_objects = amarok_player_mpris.GetAll("")
+
+        status = amarok_player_objects["PlaybackStatus"]
         if status == "Playing" or status == "Paused":
-            position = amarok_objects["Position"] / 1000000 # Convert from microseconds to seconds
-            metadata = amarok_objects["Metadata"]
+            position = amarok_player_objects["Position"] / 1000000 # Convert from microseconds to seconds
+            metadata = amarok_player_objects["Metadata"]
+
+            if not "mpris:artUrl" in metadata:
+                cover = ""
+            else:
+                if "file:amarok-sqltrackuid://" in metadata["mpris:artUrl"]:
+                    # Album cover is a url with weird amarok protocol, we need obtain the cover by external library ;p
+                    album_metadata= metadata["xesam:album"]
+                    artist_metadata = metadata["xesam:artist"][0]
+
+                    try:
+                        mbz.set_useragent("TheRecordIndustry.io", "0.1")
+                        artists_list = mbz.search_artists(query=artist_metadata)["artist-list"]
+                        artists_list = artists_list[0]
+                        release_list = mbz.browse_releases(artist=artists_list["id"])["release-list"]
+                        release_index = next((i for i, obj in enumerate(release_list) if obj["title"] == album_metadata), None)
+                        release = release_list[release_index]
+                        cover = f"https://coverartarchive.org/release/{release["id"]}/front"
+                    except:
+                        notification = Notify()
+                        notification.application_name = "AmarokRichPresence"
+                        notification.title = "AmarokRichPresence"
+                        notification.message = "Failed to fetch cover from internet, using default cover instead"
+                        notification.icon = "amarok.png"
+
+                        notification.send()
+                        cover = ""
+                else:
+                    # Album cover is file so we can fetch it :)
+                    cover = metadata["mpris:artUrl"]
 
             return {
                 "artist": metadata["xesam:artist"][0],
                 "album": metadata["xesam:album"],
+                "cover": cover,
                 "title": metadata["xesam:title"],
                 "status": status,
                 "position": position,
